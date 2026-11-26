@@ -156,6 +156,78 @@
     ws.views = [{ showGridLines: false }];
   }
 
+
+  // -------------------------------------------------------------- hoja: patines y almas de perfiles armados
+  function hojaArmado(wb, logo, meta, grupos) {
+    var ws = wb.addWorksheet("Patines y almas", { properties: { tabColor: { argb: "FF2E75D6" } } });
+    var cols = ["Fase", "Marca pieza", "Descripción", "Rol", "Ancho (mm)", "Largo (m)", "Cantidad", "Metros lineales", "Área placa (m²)",
+                "Peso unit. (kg)", "Peso total (kg)", "Ensambles (piezas)"];
+    var n = cols.length;
+    var r = cajetin(wb, ws, logo, "PATINES Y ALMAS DE PERFILES ARMADOS — marcas, fase y cantidades", meta, n);
+    anchos(ws, [10, 9, 24, 17, 9, 8, 8, 10, 10, 10, 11, 44]);
+    ws.getCell(r, 1).value = "Resumen por tipo, espesor y ancho (los rectos se compran/cortan por metro lineal; los acartelados, de plancha)";
+    ws.getCell(r, 1).font = { bold: true, color: { argb: AZUL } }; r++;
+    var er = ws.getRow(r);
+    er.values = ["Tipo", "", "Espesor", "", "Ancho (mm)", "", "Cantidad", "Metros lineales", "Área placa (m²)", "", "Peso total (kg)"];
+    estiloEncabezado(er, 11); er.height = 18; ws.mergeCells(r, 1, r, 2); ws.mergeCells(r, 3, r, 4); r++;
+    var tot = { c: 0, m: 0, m2: 0, kg: 0 }, tipoAnt = "";
+    grupos.forEach(function (g) {
+      if (g.tipo !== tipoAnt && tipoAnt) {
+        var sub = grupos.filter(function (x) { return x.tipo === tipoAnt; });
+        var fs = ws.getRow(r);
+        fs.values = ["Subtotal " + tipoAnt, null, null, null, null, null, sub.reduce(function (s, x) { return s + x.cant; }, 0),
+          sub.reduce(function (s, x) { return s + x.m; }, 0) || null, sub.reduce(function (s, x) { return s + x.m2; }, 0), null, sub.reduce(function (s, x) { return s + x.kg; }, 0)];
+        formatos(fs, { 7: F0, 8: F2, 9: F2, 11: F1 }); fs.font = { bold: true, size: 9 }; bordes(fs, 1, 11); ws.mergeCells(r, 1, r, 6); r++;
+      }
+      tipoAnt = g.tipo;
+      var f = ws.getRow(r);
+      f.values = [g.tipo, null, g.esp, null, g.ancho, null, g.cant, g.recta ? g.m : null, g.m2, null, g.kg];
+      formatos(f, { 5: F0, 7: F0, 8: F2, 9: F2, 11: F1 }); f.font = { size: 9.5 }; bordes(f, 1, 11);
+      ws.mergeCells(r, 1, r, 2); ws.mergeCells(r, 3, r, 4);
+      tot.c += g.cant; tot.m += g.m; tot.m2 += g.m2; tot.kg += g.kg; r++;
+    });
+    if (tipoAnt) {
+      var sub2 = grupos.filter(function (x) { return x.tipo === tipoAnt; });
+      var fs2 = ws.getRow(r);
+      fs2.values = ["Subtotal " + tipoAnt, null, null, null, null, null, sub2.reduce(function (s, x) { return s + x.cant; }, 0),
+        sub2.reduce(function (s, x) { return s + x.m; }, 0) || null, sub2.reduce(function (s, x) { return s + x.m2; }, 0), null, sub2.reduce(function (s, x) { return s + x.kg; }, 0)];
+      formatos(fs2, { 7: F0, 8: F2, 9: F2, 11: F1 }); fs2.font = { bold: true, size: 9 }; bordes(fs2, 1, 11); ws.mergeCells(r, 1, r, 6); r++;
+    }
+    var ft = ws.getRow(r);
+    ft.values = ["TOTAL PATINES Y ALMAS", null, null, null, null, null, tot.c, tot.m, tot.m2, null, tot.kg];
+    formatos(ft, { 7: F0, 8: F2, 9: F2, 11: F1 }); ft.font = { bold: true, size: 10, color: { argb: AZUL } }; bordes(ft, 1, 11); ws.mergeCells(r, 1, r, 6);
+    r += 2;
+    ws.getCell(r, 1).value = "Detalle: qué marcas son, en qué fase y cuántas";
+    ws.getCell(r, 1).font = { bold: true, color: { argb: AZUL } }; r++;
+    var enc = ws.getRow(r); enc.values = cols; estiloEncabezado(enc, n); var filaEnc = r; r++;
+    grupos.forEach(function (g) {
+      ws.mergeCells(r, 1, r, n);
+      var t = ws.getCell(r, 1);
+      t.value = g.grupo + "   —   " + g.cant.toLocaleString("es-GT") + " piezas   ·   " +
+        (g.recta ? g.m.toLocaleString("es-GT", { maximumFractionDigits: 2 }) + " m lineales   ·   " : "") +
+        g.m2.toLocaleString("es-GT", { maximumFractionDigits: 2 }) + " m²   ·   " + g.kg.toLocaleString("es-GT", { maximumFractionDigits: 1 }) + " kg";
+      t.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 }; t.fill = relleno(g.recta ? AZUL : "FF4B5563");
+      r++;
+      g.filas.forEach(function (x, i) {
+        var f = ws.getRow(r);
+        f.values = [x.fase, x.spm, x.desc, x.rol, x.ancho, x.largo, x.cant, g.recta ? x.m : null, x.m2, x.kgU, x.kg, x.ensTxt];
+        formatos(f, { 5: F0, 6: F3, 7: F0, 8: F2, 9: F3, 10: F3, 11: F2 });
+        f.font = { size: 9 };
+        for (var cc = 1; cc <= n; cc++) f.getCell(cc).alignment = cc === n ? { vertical: "top", wrapText: true, indent: 1 } : { vertical: "top" };
+        if (i % 2) for (var c = 1; c <= n; c++) f.getCell(c).fill = relleno(GRIS);
+        r++;
+      });
+      var st = ws.getRow(r);
+      st.values = ["", "Subtotal", null, null, null, null, g.cant, g.recta ? g.m : null, g.m2, null, g.kg];
+      formatos(st, { 7: F0, 8: F2, 9: F3, 11: F2 }); st.font = { bold: true, size: 9 };
+      for (var c3 = 1; c3 <= n; c3++) st.getCell(c3).border = { top: { style: "thin", color: { argb: "FF9CA3AF" } } };
+      r += 2;
+    });
+    ws.autoFilter = { from: { row: filaEnc, column: 1 }, to: { row: filaEnc, column: n } };
+    imprimir(ws, n, filaEnc, true);
+    ws.views = [{ showGridLines: false }];
+  }
+
   // -------------------------------------------------------------- hoja: metros lineales (resumen de compra)
   function hojaMetros(wb, L, C, logo, meta, instancias) {
     var ws = wb.addWorksheet("Metros lineales");
@@ -208,7 +280,8 @@
     meta.kg = todas.reduce(function (s, x) { return s + (x.kg || 0); }, 0);
     hojaListado(wb, L, C, logo, porFase, meta);
     var det = L.detalleMateriales(todas, C);
-    hojaDetalle(wb, logo, meta, "Placas por espesor", "PLACAS POR ESPESOR — marcas, fase y cantidades", det.placas, false);
+    hojaArmado(wb, logo, meta, det.armado);
+    hojaDetalle(wb, logo, meta, "Placas por espesor", "PLACAS DE CONEXIÓN POR ESPESOR (sin patines ni almas)", det.placas, false);
     hojaDetalle(wb, logo, meta, "Perfiles", "PERFILES — marcas, fase, cantidades y metros lineales", det.perfiles, true);
     hojaMetros(wb, L, C, logo, meta, todas);
     hojaResumen(wb, L, logo, meta, porFase);

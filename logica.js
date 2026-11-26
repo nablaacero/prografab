@@ -178,7 +178,8 @@
   // -------------------------------------------------------------- detalle por espesor (placas) y por perfil
   // instancias: [{ marca, fase, partes }]. Devuelve grupos ordenados con sus filas (una por fase + marca de pieza)
   function detalleMateriales(instancias, C) {
-    var pl = {}, pf = {};
+    var pl = {}, pf = {}, ar = {};
+    var ordenTipo = { "Patín recto": 1, "Alma recta": 2, "Alma acartelada": 3, "Patín acartelado": 4 };
     var nombreTipo = { placa: "Placa", patin: "Patín recto", alma: "Alma recta", armadoNoRecto: "Acartelada" };
     instancias.forEach(function (ins) {
       ins.partes.forEach(function (p) {
@@ -192,6 +193,20 @@
           var f = g.filas[fk] = g.filas[fk] || { fase: fase, spm: p.spm, desc: p.nombre, rol: p.rol, material: p.material,
                                                  largo: Math.round(p.largo), cant: 0, m: 0, kgU: p.peso, kg: 0, ens: {} };
           f.cant++; f.m += p.largo / 1000; f.kg += p.peso; f.ens[ins.marca] = (f.ens[ins.marca] || 0) + 1;
+        } else if ((C.rolesPatin || []).indexOf(p.rol) >= 0 || (C.rolesAlma || []).indexOf(p.rol) >= 0) {
+          // patines y almas de perfiles armados: hoja aparte
+          var esPat = (C.rolesPatin || []).indexOf(p.rol) >= 0, recta = t === "patin" || t === "alma";
+          var tipo = esPat ? (recta ? "Patín recto" : "Patín acartelado") : (recta ? "Alma recta" : "Alma acartelada");
+          var d = dimsPL(p.nombre) || { a: 0, b: 0 };
+          var ancho = Math.round(Math.min(d.a, d.b) * 1000), largo = Math.max(d.a, d.b);
+          var espA = espesorTxt(p);
+          var gka = tipo + "|" + espA + (recta ? "|" + ancho : "");
+          var ga = ar[gka] = ar[gka] || { grupo: tipo + " · " + espA + (recta ? " x " + ancho + " mm" : ""), tipo: tipo, esp: espA,
+                                          ancho: recta ? ancho : null, recta: recta, orden: ordenTipo[tipo] * 1000 + (p.esp || 0) + (recta ? ancho / 1e5 : 0), filas: {} };
+          var fka = fase + "|" + p.spm + "|" + p.nombre;
+          var fa = ga.filas[fka] = ga.filas[fka] || { fase: fase, spm: p.spm, desc: p.nombre, rol: p.rol, tipo: tipo, material: p.material,
+                                                     ancho: ancho, largo: largo, cant: 0, m: 0, m2: 0, kgU: p.peso, kg: 0, ens: {} };
+          fa.cant++; if (recta) fa.m += largo; fa.m2 += p.areaPl || 0; fa.kg += p.peso; fa.ens[ins.marca] = (fa.ens[ins.marca] || 0) + 1;
         } else {
           var esp = espesorTxt(p);
           var g2 = pl[esp] = pl[esp] || { grupo: esp, orden: p.esp || 999, filas: {} };
@@ -220,7 +235,8 @@
     };
     return {
       placas: cerrar(pl, function (a, b) { return a.orden - b.orden || cmpNat(a.grupo, b.grupo); }),
-      perfiles: cerrar(pf, function (a, b) { return cmpNat(a.grupo, b.grupo); })
+      perfiles: cerrar(pf, function (a, b) { return cmpNat(a.grupo, b.grupo); }),
+      armado: cerrar(ar, function (a, b) { return a.orden - b.orden || cmpNat(a.grupo, b.grupo); })
     };
   }
 
