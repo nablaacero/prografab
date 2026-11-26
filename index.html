@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrograFAB</title>
+<link rel="icon" href="icono.png">
+<style>
+  :root { --azul:#14325f; --naranja:#e8622c; --gris:#f3f4f6; --borde:#d9dce1; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Segoe UI", Arial, sans-serif; font-size:13px; color:#1f2937; background:#fff; }
+  header { background:var(--azul); color:#fff; padding:10px 12px; border-bottom:3px solid var(--naranja); }
+  header h1 { margin:0; font-size:15px; font-weight:600; }
+  header small { opacity:.8; }
+  section { padding:10px 12px; border-bottom:1px solid var(--borde); }
+  label { display:block; font-size:11px; color:#6b7280; margin:6px 0 2px; text-transform:uppercase; letter-spacing:.03em; }
+  input[type=text], select { width:100%; padding:6px 8px; border:1px solid var(--borde); border-radius:4px; font-size:13px; }
+  .dos { display:flex; gap:6px; } .dos > div { flex:1; }
+  .fila { display:flex; gap:6px; margin-top:8px; }
+  button { flex:1; padding:7px 8px; border:1px solid var(--azul); background:#fff; color:var(--azul); border-radius:4px;
+           font-size:12px; font-weight:600; cursor:pointer; }
+  button.prim { background:var(--azul); color:#fff; }
+  button.nar { background:var(--naranja); border-color:var(--naranja); color:#fff; }
+  button:disabled { opacity:.5; cursor:default; }
+  #estado { font-size:12px; color:#374151; min-height:18px; margin-top:6px; }
+  #estado.error { color:#b91c1c; }
+  .tit { font-size:11px; font-weight:700; color:var(--azul); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+  .tit .der { margin-left:auto; font-weight:400; text-transform:none; color:#6b7280; letter-spacing:0; }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; }
+  .chip { flex:none; padding:3px 7px; border:1px solid #c7cdd6; border-radius:12px; background:#fff; color:#1f2937; font-weight:600; font-size:12px; }
+  .chip span { font-weight:400; color:#6b7280; margin-left:3px; }
+  .chip.act { background:var(--azul); border-color:var(--azul); color:#fff; } .chip.act span { color:#cbd5e1; }
+  .chip.todo { border-style:dashed; }
+  label.chk { display:flex; align-items:center; gap:6px; font-size:12.5px; color:#1f2937; text-transform:none; letter-spacing:0; margin:8px 0 2px; cursor:pointer; }
+  .sw { width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,.2); display:inline-block; vertical-align:-2px; flex:none; }
+  input[type=color] { width:20px; height:18px; padding:0; border:0; background:none; cursor:pointer; vertical-align:-4px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; font-size:11px; color:#6b7280; border-bottom:1px solid var(--borde); padding:4px 3px; background:#fff; }
+  td { padding:4px 3px; border-bottom:1px solid #eef0f3; font-variant-numeric:tabular-nums; }
+  td.num, th.num { text-align:right; }
+  tr.act td { background:#eef2f8; }
+  tr.tot td { font-weight:700; border-top:1px solid #9ca3af; border-bottom:none; }
+  td.nom { cursor:pointer; } td.nom:hover { text-decoration:underline; }
+  td.accs { white-space:nowrap; text-align:right; }
+  button.ico { flex:none; padding:2px 4px; margin-left:2px; line-height:0; border-color:#c7cdd6; font-size:11px; }
+  button.ico:hover { background:#eef2f8; border-color:var(--azul); }
+  button.ico.txt { line-height:1.2; padding:2px 5px; }
+  .ayuda { font-size:11px; color:#6b7280; margin-top:4px; }
+  .aviso { font-size:11px; color:#92400e; background:#fffbeb; border:1px solid #fde68a; padding:6px; border-radius:4px; margin-top:6px; }
+  .ok { font-size:11px; color:#065f46; }
+  .pend { color:#b45309; font-weight:600; }
+  details summary { cursor:pointer; color:var(--azul); font-weight:600; }
+  pre { white-space:pre-wrap; font-size:11px; background:var(--gris); padding:6px; border-radius:4px; max-height:240px; overflow:auto; }
+  .oculto { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PrograFAB · Programación de fabricación</h1>
+  <small>NABLA Acero · fases por ensamble · v1.1</small>
+</header>
+
+<section>
+  <div class="dos">
+    <div><label for="proyecto">Proyecto</label><input type="text" id="proyecto" placeholder="ej. 1274"></div>
+    <div><label for="alias">Alias / edificio</label><input type="text" id="alias" placeholder="ej. BU"></div>
+  </div>
+  <div class="fila">
+    <button class="prim" id="btnLeer">Leer modelo</button>
+    <button id="btnColor">Colorear por fase</button>
+    <button id="btnReset">Quitar colores</button>
+  </div>
+  <div id="estado"></div>
+</section>
+
+<section>
+  <div class="tit">1 · Seleccionar <span class="der" id="txtSel"></span></div>
+  <div class="chips" id="chips"><span class="ayuda">Presiona «Leer modelo» para ver los códigos.</span></div>
+  <label class="chk"><input type="checkbox" id="soloSinFase" checked> Solo ensambles que aún no tienen fase</label>
+  <label for="marcas">Marcas (separadas por coma, * = cualquier texto)</label>
+  <input type="text" id="marcas" placeholder="ej. CL8100, VT81*, BC80*">
+  <div class="fila">
+    <button id="btnMarcas">Seleccionar marcas</button>
+    <button id="btnLimpiar">Limpiar selección</button>
+  </div>
+  <div class="ayuda">También puedes seleccionar a mano en el modelo (una pieza basta: se toma su ensamble).</div>
+</section>
+
+<section>
+  <div class="tit">2 · Asignar a fase</div>
+  <div class="dos">
+    <div><select id="faseActiva"></select></div>
+    <div style="flex:none"><button class="nar" id="btnAsignar" style="width:auto;padding:6px 12px">Asignar selección</button></div>
+  </div>
+  <div class="fila">
+    <input type="text" id="nuevaFase" placeholder="Nueva fase (ej. Fase 1)" style="flex:2">
+    <button id="btnNueva">+ Crear</button>
+  </div>
+  <div class="fila">
+    <button id="btnQuitar">Quitar fase a la selección</button>
+    <button id="btnListSel">Listado de la selección</button>
+  </div>
+</section>
+
+<section>
+  <div class="tit">3 · Fases <span class="der" id="txtGuardado"></span></div>
+  <table>
+    <thead><tr><th>Fase</th><th class="num">Ens.</th><th class="num">Pzas</th><th class="num">Ton</th><th></th></tr></thead>
+    <tbody id="cuerpoFases"></tbody>
+  </table>
+  <div id="avisoFases"></div>
+  <div class="ayuda">Clic en el nombre para renombrar · ▶ selecciona · ◉ muestra solo · XLS listado · × borra la fase</div>
+  <div class="fila">
+    <button class="prim" id="btnGuardarTC">Guardar en Trimble Connect</button>
+    <button id="btnRecargarTC">Recargar</button>
+  </div>
+  <div class="fila"><button id="btnXlsTodas">Listado de todas las fases (un Excel)</button></div>
+  <label class="chk"><input type="checkbox" id="subirListados"> Guardar también los listados Excel en la carpeta del proyecto</label>
+  <details style="margin-top:6px"><summary>Respaldo manual</summary>
+    <div class="fila">
+      <button id="btnDescJSON">Descargar fases (.json)</button>
+      <button id="btnCargarJSON">Cargar fases (.json)</button>
+    </div>
+    <input type="file" id="archivoJSON" accept=".json" class="oculto">
+  </details>
+</section>
+
+<section>
+  <details>
+    <summary>Diagnóstico</summary>
+    <p style="font-size:12px">Selecciona una pieza en el modelo y presiona el botón.</p>
+    <button id="btnDiag">Ver propiedades de la selección</button>
+    <pre id="diag"></pre>
+  </details>
+</section>
+
+<script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
+<script src="exceljs.min.js"></script>
+<script src="excel.js?v=1.1"></script>
+<script src="config.js?v=1.1"></script>
+<script src="logica.js?v=1.1"></script>
+<script src="app.js?v=1.1"></script>
+</body>
+</html>
