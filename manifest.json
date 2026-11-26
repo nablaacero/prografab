@@ -1,8 +1,0 @@
-{
-  "title": "PrograFAB",
-  "description": "Programación de fabricación NABLA Acero: asigna ensambles a fases, colorea el modelo por fase y genera listados por fase (ensambles, piezas y metros lineales).",
-  "url": "https://nablaacero.github.io/prografab/index.html",
-  "icon": "https://nablaacero.github.io/prografab/icono.png",
-  "infoUrl": "https://nablaacero.github.io/prografab/ayuda.html",
-  "extensionType": ["3dviewer"]
-}
