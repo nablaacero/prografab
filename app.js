@@ -89,17 +89,37 @@
         var main = ps.filter(function (p) { return p.main; })[0] || ps[0];
         var marca = String(x.nombre || (main && main.mpm) || "").trim().toUpperCase();
         if (!marca) return;
-        var key = main && main.handle ? "H:" + main.handle : marca + "@" + x.modelId + ":" + x.id;
-        if (claves[key]) key += "#" + (++claves[key]); else claves[key] = 1;
+        // la clave definitiva (GUID del ensamble) se pone después; el Handle queda como alias para fases viejas
+        var alias = main && main.handle ? ["H:" + main.handle] : [];
+        var key = alias[0] || marca + "@" + x.modelId + ":" + x.id;
         var fab = ps.filter(function (p) { return L.tipoParte(p, C) !== "nofab"; });
-        var it = { key: key, marca: marca, pref: L.prefijo(marca), modelId: x.modelId, ids: [x.id].concat(hijos), partes: ps,
+        var it = { key: key, alias: alias, aid: x.id, marca: marca, pref: L.prefijo(marca), modelId: x.modelId, ids: [x.id].concat(hijos), partes: ps,
                    kg: fab.reduce(function (s, p) { return s + p.peso; }, 0), pz: fab.length };
         var k = ins.push(it) - 1;
         it.ids.forEach(function (id) { porRid[x.modelId + ":" + id] = k; });
       });
       estado("Agrupando piezas por ensamble… " + Math.min(u + 40, asm.length) + "/" + asm.length);
     }
-    modelo = { ins: ins, porRid: porRid, todosIds: todosIds };
+    // GUID (IFC) de cada ensamble: no cambia al volver a exportar el IFC, por eso es la clave de las fases
+    var porMod = {};
+    ins.forEach(function (it) { (porMod[it.modelId] = porMod[it.modelId] || []).push(it); });
+    var nGuid = 0;
+    for (var mid2 in porMod) {
+      var l = porMod[mid2];
+      for (var g = 0; g < l.length; g += 1000) {
+        var tr = l.slice(g, g + 1000);
+        try {
+          var guids = await API.viewer.convertToObjectIds(mid2, tr.map(function (it) { return it.aid; }));
+          tr.forEach(function (it, j) { if (guids && guids[j]) { it.guid = String(guids[j]); nGuid++; } });
+        } catch (e) {}
+        estado("Leyendo GUID de los ensambles… " + Math.min(g + 1000, l.length) + "/" + l.length);
+      }
+    }
+    ins.forEach(function (it) {
+      if (it.guid) { if (it.key.indexOf("H:") === 0 || it.key.indexOf("@") > 0) it.alias.push(it.key); it.key = "G:" + it.guid; }
+      if (claves[it.key]) it.key += "#" + (++claves[it.key]); else claves[it.key] = 1;
+    });
+    modelo = { ins: ins, porRid: porRid, todosIds: todosIds, nGuid: nGuid };
     return modelo;
   }
 
@@ -113,12 +133,60 @@
       await indexar();
       var avisoTC = "";
       try { await recargarTC(true); } catch (e) { avisoTC = " · " + (e.message || e); }
+      var rc = reconciliar();
       pintarChips(); pintarFases();
       var conFase = modelo.ins.filter(function (x) { return datos.asign[x.key]; }).length;
-      estado(modelo.ins.length.toLocaleString("es-GT") + " ensambles en el modelo · " + conFase + " con fase." + avisoTC, !!avisoTC);
+      var txtRc = (rc.porClave ? " · " + rc.porClave + " recuperados por identificador" : "") +
+                  (rc.porMarca ? " · " + rc.porMarca + " reasignados por marca" : "") +
+                  (rc.revisar.length ? " · " + rc.revisar.length + " marcas para revisar (ver aviso)" : "") +
+                  (rc.porClave || rc.porMarca ? ". Presiona «Guardar en Trimble Connect»" : "");
+      estado(modelo.ins.length.toLocaleString("es-GT") + " ensambles en el modelo · " + conFase + " con fase" + txtRc +
+        (modelo.nGuid ? "" : " · el visor no dio GUID: se usa el Handle") + "." + avisoTC, !!avisoTC);
     } catch (e) { estado(e.message || String(e), true); }
     finally { ocupado(false); }
   }
+  // Pasa las fases guardadas al ensamble del modelo actual cuando cambió el identificador (IFC reexportado).
+  // 1) por identificador viejo (Handle) 2) por marca, si todas las piezas de esa marca estaban en una sola fase.
+  var porRevisar = [];
+  function reconciliar() {
+    var r = { porClave: 0, porMarca: 0, revisar: [] };
+    if (!modelo) return r;
+    modelo.ins.forEach(function (x) {
+      if (datos.asign[x.key]) return;
+      for (var i = 0; i < (x.alias || []).length; i++) {
+        var a = x.alias[i], f = datos.asign[a];
+        if (f && fase(f)) {
+          datos.asign[x.key] = f; datos.marcas[x.key] = x.marca; pend.asign[x.key] = f;
+          delete datos.asign[a]; delete datos.marcas[a]; pend.asign[a] = "";
+          r.porClave++; return;
+        }
+      }
+    });
+    var claves = {}; modelo.ins.forEach(function (x) { claves[x.key] = 1; });
+    var huerf = {};   // marca -> { faseId: [claves viejas] }
+    Object.keys(datos.asign).forEach(function (k) {
+      if (claves[k] || !fase(datos.asign[k])) return;
+      var m = datos.marcas[k]; if (!m) return;
+      var h = huerf[m] = huerf[m] || {};
+      (h[datos.asign[k]] = h[datos.asign[k]] || []).push(k);
+    });
+    Object.keys(huerf).forEach(function (m) {
+      var fs = Object.keys(huerf[m]);
+      var libres = modelo.ins.filter(function (x) { return x.marca === m && !datos.asign[x.key]; });
+      if (!libres.length) return;
+      if (fs.length > 1) { r.revisar.push(m + " (" + fs.map(function (f) { return fase(f).nombre + ": " + huerf[m][f].length; }).join(", ") + ")"); return; }
+      var viejas = huerf[m][fs[0]], n = Math.min(viejas.length, libres.length);
+      for (var i = 0; i < n; i++) {
+        datos.asign[libres[i].key] = fs[0]; datos.marcas[libres[i].key] = m; pend.asign[libres[i].key] = fs[0];
+        delete datos.asign[viejas[i]]; delete datos.marcas[viejas[i]]; pend.asign[viejas[i]] = "";
+        r.porMarca++;
+      }
+    });
+    porRevisar = r.revisar;
+    if (r.porClave || r.porMarca) guardarTodoLocal();
+    return r;
+  }
+
   function ocupado(si) { ["btnLeer", "btnAsignar", "btnGuardarTC"].forEach(function (b) { $(b).disabled = si; }); }
 
   // ------------------------------------------------------------ selección
@@ -264,7 +332,9 @@
       if (fuera.length) {
         var ms = fuera.map(function (k) { return datos.marcas[k] || k; });
         aviso = '<div class="aviso">' + fuera.length + " ensambles con fase no están en los modelos cargados (otro modelo, o se borraron/renumeraron): " +
-          esc(ms.slice(0, 30).join(", ")) + (ms.length > 30 ? "…" : "") + "</div>";
+          esc(ms.slice(0, 30).join(", ")) + (ms.length > 30 ? "…" : "") +
+          (porRevisar.length ? "<br><b>Marcas repartidas en varias fases que no pude reasignar solas</b> (asígnalas a mano y guarda): " + esc(porRevisar.join("; ")) : "") +
+          "</div>";
       }
     }
     $("avisoFases").innerHTML = aviso;
