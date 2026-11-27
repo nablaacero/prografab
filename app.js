@@ -331,15 +331,44 @@
       var fuera = Object.keys(datos.asign).filter(function (k) { return !enModelo[k]; });
       if (fuera.length) {
         var ms = fuera.map(function (k) { return datos.marcas[k] || k; });
-        aviso = '<div class="aviso">' + fuera.length + " ensambles con fase no están en los modelos cargados (otro modelo, o se borraron/renumeraron): " +
+        // marcas repartidas: se recalcula con lo que aún sobra, y solo si esa marca tiene piezas sin fase en el modelo
+        var rep = {};
+        fuera.forEach(function (k) { var m = datos.marcas[k]; if (!m || !fase(datos.asign[k])) return; var f = fase(datos.asign[k]).nombre; (rep[m] = rep[m] || {})[f] = (rep[m][f] || 0) + 1; });
+        var revisar = Object.keys(rep).filter(function (m) {
+          return Object.keys(rep[m]).length > 1 && modelo.ins.some(function (x) { return x.marca === m && !datos.asign[x.key]; });
+        }).map(function (m) { return m + " (" + Object.keys(rep[m]).map(function (f) { return f + ": " + rep[m][f]; }).join(", ") + ")"; });
+        aviso = '<div class="aviso">' + fuera.length + " asignaciones guardadas no corresponden a ningún ensamble de los modelos cargados " +
+          "(son de otro modelo sin cargar, o de una versión anterior del IFC): " +
           esc(ms.slice(0, 30).join(", ")) + (ms.length > 30 ? "…" : "") +
-          (porRevisar.length ? "<br><b>Marcas repartidas en varias fases que no pude reasignar solas</b> (asígnalas a mano y guarda): " + esc(porRevisar.join("; ")) : "") +
+          (revisar.length ? "<br><b>Marcas repartidas en varias fases que aún tienen piezas sin fase</b> (asígnalas a mano y guarda): " + esc(revisar.join("; ")) : "") +
+          '<div style="margin-top:6px"><button class="ico txt" id="btnDescartar" style="padding:4px 8px">Descartar estas ' + fuera.length + " asignaciones</button>" +
+          ' <span style="color:#6b7280">— solo si ya cargaste <b>todos</b> los modelos del proyecto.</span></div>' +
           "</div>";
       }
     }
     $("avisoFases").innerHTML = aviso;
     $("txtGuardado").innerHTML = hayPend() ? '<span class="pend">cambios sin guardar</span>'
       : (datos.guardadoTC ? '<span class="ok">guardado ' + new Date(datos.guardadoTC).toLocaleString("es-GT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + "</span>" : "");
+  }
+
+  // descarta las asignaciones guardadas cuyo ensamble no está en los modelos cargados (segundo clic para confirmar)
+  var porDescartar = false;
+  function descartarFuera() {
+    if (!modelo) return;
+    var enModelo = {}; modelo.ins.forEach(function (x) { enModelo[x.key] = 1; });
+    var fuera = Object.keys(datos.asign).filter(function (k) { return !enModelo[k]; });
+    if (!fuera.length) return;
+    if (!porDescartar) {
+      porDescartar = true;
+      estado("Se borrarán " + fuera.length + " asignaciones que no están en los modelos cargados. Presiona «Descartar» otra vez para confirmar.", true);
+      setTimeout(function () { porDescartar = false; }, 6000);
+      return;
+    }
+    porDescartar = false;
+    fuera.forEach(function (k) { delete datos.asign[k]; delete datos.marcas[k]; pend.asign[k] = ""; });
+    porRevisar = [];
+    marcarCambio();
+    estado(fuera.length + " asignaciones descartadas. Presiona «Guardar en Trimble Connect» para que quede así para todos.");
   }
 
   function borrarFase(id) {
@@ -689,6 +718,7 @@
     var f = fase(id); f.color = ev.target.value; pend.fases[id] = f; marcarCambio();
   });
   $("btnGuardarTC").addEventListener("click", guardarTC);
+  $("avisoFases").addEventListener("click", function (ev) { if (ev.target.closest("#btnDescartar")) descartarFuera(); });
   $("btnXlsTodas").addEventListener("click", exportarTodas);
   $("btnRecargarTC").addEventListener("click", function () { recargarTC(false).catch(function (e) { estado(e.message || e, true); }); });
   $("subirListados").checked = leerLocal("subirListados") === "1";
