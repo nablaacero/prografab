@@ -38,6 +38,10 @@ window.CONFIG = {
     "Roof camera", "Shear Stud", "Shear Stud Welding", "Slab", "Slotted Hole", "Solid objects", "Special Nuts",
     "Special Washers", "Stem", "Tensioner", "Threaded hole", "Timber Tread", "Upat Anchor", "Visible", "Weld", "Welding"],
 
+  // Roles genéricos: aunque estén en la lista de arriba, la pieza SÍ se fabrica (SteelX los deja en tubos,
+  // vigas y placas reales sin rol asignado). Solo se excluyen si son pernos (IfcFastener).
+  rolesGenericos: ["None", "Not overridden role", "Visible", "Not visible", "Off", "Group", "Solid objects", "Feature"],
+
   // Colores que se van asignando a las fases nuevas
   coloresFase: ["#2E75D6", "#2CA02C", "#F2C500", "#8E44AD", "#D62728", "#17BECF",
                 "#E377C2", "#8C564B", "#FFB000", "#0B2E6B", "#00A087", "#7F3C8D"],

@@ -10,36 +10,54 @@
   function n0(v) { var x = num(v); return isFinite(x) ? x : 0; }
   function cmpNat(a, b) { return String(a).localeCompare(String(b), "es", { numeric: true, sensitivity: "base" }); }
 
-  // valor de una propiedad del grupo indicado (sin importar mayúsculas)
+  // valor de una propiedad del grupo indicado (sin importar mayúsculas); si ese grupo no la trae,
+  // se busca en cualquier otro grupo (IFC exportados con otra versión de SteelX o sin el grupo "Nabla Aceros")
   function prop(obj, set, nombre) {
-    var sets = obj.properties || [];
+    var sets = obj.properties || [], n = String(nombre).toLowerCase(), otro;
     for (var s = 0; s < sets.length; s++) {
-      if (String(sets[s].name || "").toLowerCase() !== set.toLowerCase()) continue;
+      var mio = String(sets[s].name || "").toLowerCase() === String(set).toLowerCase();
       var ps = sets[s].properties || [];
-      for (var k = 0; k < ps.length; k++) if (String(ps[k].name || "").toLowerCase() === nombre.toLowerCase()) return ps[k].value;
+      for (var k = 0; k < ps.length; k++) {
+        if (String(ps[k].name || "").toLowerCase().replace(/[\s_]/g, "") !== n.replace(/[\s_]/g, "")) continue;
+        if (mio) return ps[k].value;
+        if (otro === undefined) otro = ps[k].value;
+      }
     }
+    return otro;
+  }
+  function primero(obj, set, nombres) {
+    for (var i = 0; i < nombres.length; i++) { var v = prop(obj, set, nombres[i]); if (v !== undefined && v !== null && v !== "") return v; }
     return undefined;
   }
+  var CLASES_PIEZA = /PLATE|BEAM|MEMBER|COLUMN|PIPE|PROXY|DISCRETEACCESSORY|BUILDINGELEMENTPART/i;
 
   // Objeto de Trimble Connect -> pieza (o null si no trae las propiedades de Nabla)
   function leerParte(obj, C) {
     var g = function (n) { return prop(obj, C.pset, n); };
     var rol = g("ModelRole");
-    if (rol === undefined && g("SinglePartMark") === undefined) return null;
-    var sp = String(g("SinglePartMark") || "").trim();
+    var sp0 = primero(obj, C.pset, ["SinglePartMark", "Single Part Mark", "Part Mark", "PartMark", "PART_POS", "Part position"]);
+    var clase = String(obj.class || "");
+    // sin propiedades de Nabla: se acepta igual si es una pieza física (placa, viga, miembro, columna…)
+    if (rol === undefined && sp0 === undefined && !CLASES_PIEZA.test(clase)) return null;
+    var desc = String(obj.product && obj.product.description || "");
+    var kgDesc = (desc.match(/([\d.,]+)\s*kg/i) || [])[1];
+    var sp = String(sp0 || (obj.product && obj.product.name) || "").trim();
     return {
       id: obj.id,
       spm: sp,
       mpm: String(g("MainPartMark") || "").trim(),
       rol: String(rol || "").trim(),
-      nombre: String(g("ElementName") || (obj.product && obj.product.name) || "").trim(),
-      perfil: String(g("Profile") || "").trim(),
+      nombre: String(g("ElementName") || primero(obj, C.pset, ["Profile", "ProfileName", "Section"]) ||
+                     desc.split("|")[0] || (obj.product && obj.product.name) || "").trim(),
+      perfil: String(primero(obj, C.pset, ["Profile", "ProfileName", "Section"]) || desc.split("|")[0] || "").trim(),
       largo: n0(g("LengthNet_mm")),
-      peso: n0(g("WeightNet_kg")),
+      // peso: neto; si no viene (tubos/perfiles de SteelX), bruto; si tampoco, kg/m x largo
+      peso: n0(g("WeightNet_kg")) || n0(g("WeightGross_kg")) || n0(g("WeightPerMeter_kgm")) * n0(g("LengthNet_mm")) / 1000 ||
+            n0(primero(obj, C.pset, ["Weight", "NetWeight", "Net Weight", "GrossWeight"])) || n0(kgDesc),
       pintura: n0(g("PaintArea_m2")),
       esp: n0(g("Thickness_mm")),
       areaPl: n0(g("PlateArea_m2")),
-      ent: String(g("IfcEntity") || obj.class || "").toUpperCase(),
+      ent: String(g("IfcEntity") || clase).toUpperCase(),
       main: /^\.?t/i.test(String(g("IsMainPart") || "")) || g("IsMainPart") === true,
       handle: String(g("Handle") || "").trim(),
       material: String(g("Material") || "").trim()
@@ -66,7 +84,11 @@
 
   // tipo de pieza para los resúmenes
   function tipoParte(p, C) {
-    if ((C.rolesNoFabrica || []).indexOf(p.rol) >= 0 || /FASTENER/.test(p.ent)) return "nofab";
+    if (/FASTENER/.test(p.ent)) return "nofab";
+    // roles genéricos ("None", "Not overridden role"…): Advance Steel los deja en piezas reales (tubos, vigas, placas),
+    // así que solo cuentan como "no se fabrica" los roles específicos (pernos, anclas, concreto…)
+    var generico = (C.rolesGenericos || []).indexOf(p.rol) >= 0 || !p.rol;
+    if (!generico && (C.rolesNoFabrica || []).indexOf(p.rol) >= 0) return "nofab";
     var pat = (C.rolesPatin || []).indexOf(p.rol) >= 0, alm = (C.rolesAlma || []).indexOf(p.rol) >= 0;
     if (esPlaca(p)) {
       if (pat || alm) return esRecta(p, C.tolRecta) ? (pat ? "patin" : "alma") : "armadoNoRecto";

@@ -213,7 +213,10 @@
 
   async function seleccionar(lista, texto) {
     if (!lista.length) { await API.viewer.setSelection({ modelObjectIds: [] }, "set").catch(function () {}); $("txtSel").textContent = ""; return; }
-    await API.viewer.setSelection(selector(lista), "set");
+    var sel = selector(lista);
+    // lo seleccionado siempre queda visible (si antes se usó «mostrar solo» de otra fase)
+    await API.viewer.setObjectState(sel, { visible: true }).catch(function () {});
+    await API.viewer.setSelection(sel, "set");
     $("txtSel").textContent = lista.length + " ensambles · " + ton(lista.reduce(function (s, x) { return s + x.kg; }, 0)) + " t";
     if (texto) estado(texto);
   }
@@ -427,6 +430,14 @@
     try { await API.viewer.setObjectState(undefined, { color: "reset", visible: "reset" }); estado("Colores restablecidos."); } catch (e) {}
   }
 
+  async function mostrarTodo() {
+    try {
+      if (modelo) await API.viewer.setObjectState({ modelObjectIds: modelo.todosIds }, { visible: true });
+      await API.viewer.setObjectState(undefined, { visible: "reset" });
+      estado("Se muestra todo el modelo.");
+    } catch (e) {}
+  }
+
   async function mostrarSolo(lista, nombre) {
     var sel = selector(lista), ok = false;
     try {
@@ -442,7 +453,7 @@
       await API.viewer.setObjectState(sel, { visible: true });
     }
     await API.viewer.setCamera(sel, { animationTime: 400 }).catch(function () {});
-    estado("Mostrando solo " + nombre + " · " + lista.length + " ensambles. «Quitar colores» vuelve a mostrar todo.");
+    estado("Mostrando solo " + nombre + " · " + lista.length + " ensambles. «Mostrar todo» vuelve a mostrar el modelo completo.");
   }
 
   // ------------------------------------------------------------ listados Excel (ExcelJS: logo y formato)
@@ -678,6 +689,7 @@
   $("btnLeer").addEventListener("click", leerModelo);
   $("btnColor").addEventListener("click", colorear);
   $("btnReset").addEventListener("click", quitarColores);
+  $("btnTodo").addEventListener("click", mostrarTodo);
   $("chips").addEventListener("click", function (ev) {
     var b = ev.target.closest("button.chip"); if (!b || !modelo) return;
     if (b.dataset.p === "*") chipsSel = {}; else chipsSel[b.dataset.p] = !chipsSel[b.dataset.p];
